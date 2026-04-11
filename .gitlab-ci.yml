@@ -1,0 +1,108 @@
+#
+stages:
+  - validate
+  - download
+  - process
+  - upload
+  - cleanup
+
+default:
+  image: python:3.11-slim
+  tags:
+    - docker
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq postgresql-client gcc libpq-dev
+    - pip install --upgrade pip
+    - pip install --quiet --no-cache-dir -r requirements.txt psycopg2-binary
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  TEMP_DIR: "temp"
+  DUMP_FILE: "anonymized_${CI_PIPELINE_ID}.sql"
+  ANONYMIZATION_CONFIG: "config/anonymization.yaml"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_USER: admin
+  POSTGRES_PASSWORD: tyucvb1620
+  POSTGRES_DB: db
+
+cache:
+  key: pip-${CI_COMMIT_REF_SLUG}
+  paths:
+    - .pip-cache/
+
+# ---------------- VALIDATE ----------------
+validate:config:
+  stage: validate
+  script:
+    - echo "=== Проверка конфига ==="
+    - test -f "$ANONYMIZATION_CONFIG"
+    - echo "=== Проверка YAML ==="
+    - python -c "import yaml,sys;cfg=yaml.safe_load(open('$ANONYMIZATION_CONFIG'));tables=cfg.get('tables',{});print(len(tables));sys.exit(0 if tables else 1)"
+    - echo "=== ENV ==="
+    - |
+      for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB MINIO_ROOT_USER MINIO_ROOT_PASSWORD ENDPOINT_URL; do
+        if [ -z "${!var}" ]; then
+          echo "Missing variable: $var"
+          exit 1
+        fi
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /push|web|schedule/'
+
+# ---------------- DOWNLOAD ----------------
+download:dumps:
+  stage: download
+  script:
+    - mkdir -p "$TEMP_DIR"
+    - python -m anonymizer.main --download --no-restore-on-download --restore-folder "$TEMP_DIR"
+    - ls -lh "$TEMP_DIR" || true
+    - test "$(ls -1 $TEMP_DIR/*.sql 2>/dev/null | wc -l)" -gt 0
+  artifacts:
+    paths:
+      - temp/
+    expire_in: 2 hours
+  needs:
+    - validate:config
+
+# ---------------- PROCESS ----------------
+process:database:
+  stage: process
+  services:
+    - name: postgres:15-alpine
+      alias: postgres
+  needs:
+    - job: download:dumps
+      artifacts: true
+  script:
+    - echo "Waiting DB..."
+    - for i in {1..30}; do pg_isready -h postgres -U $POSTGRES_USER && break || sleep 2; done
+
+    - python -m anonymizer.main --restore --restore-folder "$TEMP_DIR"
+    - python -m anonymizer.main --anonymize --config "$ANONYMIZATION_CONFIG"
+    - python -m anonymizer.main --dump --dump-name "$DUMP_FILE"
+
+    - test -f "$DUMP_FILE"
+    - SIZE=$(wc -c < "$DUMP_FILE")
+    - test "$SIZE" -gt 0
+  artifacts:
+    paths:
+      - $DUMP_FILE
+    expire_in: 24 hours
+
+# ---------------- UPLOAD ----------------
+upload:dump:
+  stage: upload
+  needs:
+    - job: process:database
+      artifacts: true
+  script:
+    - python -m anonymizer.main --upload --dump-name "$DUMP_FILE"
+
+# ---------------- CLEANUP ----------------
+cleanup:
+  stage: cleanup
+  when: always
+  script:
+    - rm -rf "$TEMP_DIR" || true

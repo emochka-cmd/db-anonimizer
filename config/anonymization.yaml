@@ -1,0 +1,140 @@
+# anonymizer.yaml
+# Конфигурация анонимизации продуктивной БД PostgreSQL
+
+
+# Настройки
+settings:
+  fixed_value: ' '
+  # путь для словарей
+  dictionaries:
+    names_file: "dictionaries/male_names_rus.txt"
+    surnames_file: "dictionaries/male_surnames_rus.txt" 
+    full_name_file: "dictionaries/rus_full_name_file.txt"
+    company_words_file: "dictionaries/company_words.txt"
+    project_words_file: "dictionaries/project_words.txt"
+    common_words_file: "dictionaries/common_words.txt"
+
+  # настройки чтения бд
+  batch_size: 1000
+
+
+# Список таблиц и полей для анонимизации
+# Для каждого значения задается алгоритм анонимизации
+tables:
+  # Для таблицы users
+  users:
+    columns:
+      first_name: 
+        algorithm: rus_name
+        params:
+          source: "names_file"
+      
+      last_name:
+        algorithm: rus_surname
+        params:
+          source: "surnames_file"
+
+      email:
+        algorithm: email_from_name
+        params:
+          use_transliterate: true
+
+  # Таблица customers_contacts
+  customer_contacts:
+    columns:
+      full_name:
+        algorithm: rus_full_name
+        params:
+          source: "full_name_file"
+
+      phone:
+        algorithm: phone
+        params:
+          phone_mask: "+7 (XXX) XXX XX XX"
+
+      email:
+        algorithm: email_from_name
+        params:
+          use_transliterate: true
+          domain: "anonymized.local"
+
+
+  # Таблица customers
+  customers:
+    columns:
+      name:
+        algorithm: company_name
+        params:
+          words_source: "company_words_file"
+          preserve_length: true
+          min_words: 1
+          max_words: 3
+          separator: " "
+
+      number:
+        algorithm: random_digits
+        params:
+          length: 5
+
+  # Таблица projects
+  projects:
+    columns:
+      name:
+        algorithm: project_name
+        params:
+          words_source: "project_words_file"
+          preserve_length: true
+          min_words: 1
+          max_words: 5
+
+      number:
+        algorithm: random_digits
+        params:
+          length: 5
+
+      price:
+        algorithm: random_int
+        params:
+            min: 10000
+            max: 10000000
+
+  # Таблица companies_btx   
+  companies_btx:
+    columns:
+      title:
+        algorithm: company_name
+        params:
+          words_source: "company_words_file"
+          preserve_length: true
+
+      number:
+        algorithm: random_digits
+        params:
+          length: 5
+
+      inn:
+        algorithm: random_digits
+        params:
+          length: 10
+
+      kpp:
+        algorithm: random_digits
+        params:
+          length: 9
+
+
+# Регистрация доступных алгоритмов
+algorithms:
+  - rus_name          # Имя из txt файла
+  - rus_surname       # Фамилия из txt файла
+  - rus_full_name     # Полное имя (Имя + Фамилия) из txt файла
+  - email_from_name   # Email из ФИО с транслитерацией
+  - random_email      # Случайный email
+  - phone             # Номер телефона по маске
+  - company_name      # Название компании из слов
+  - project_name      # Название проекта из слов
+  - random_digits     # Случайные цифры
+  - random_int        # Случайное число в диапазоне
+  - random_words      # Случайные слова из словаря
+  - random_string     # Случайные символы
+  - fixed_value       # Фиксированное значение
