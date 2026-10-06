@@ -1,0 +1,45 @@
+# Виртуальное окружение
+.venv/
+
+# Кэш и скомпилированные файлы Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Файлы с переменными окружения
+.env
+anonymizer/.env
+
+# Временные папки
+anonymizer/temp/
+temp/
+
+# Логи
+logs/
+*.log
+
+# Данные приложения и база данных
+data/
+pgdata/
+runner-config/
+minio-data/
+
+# Сертификаты, ключи и секреты
+config/trusted-certs/
+*.pem
+*.crt
+*.key
+ssh_host_*
+gitlab-sec*
+initial_root*
+*.rb
+
+# Файлы переопределения Docker Compose (например, docker-compose.override.yml)
+docker-compose.override.yml
+*.override.yml
+
+# Системные и IDE-файлы (опционально)
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
